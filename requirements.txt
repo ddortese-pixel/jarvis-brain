@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+groq
+edge-tts
+psutil
+httpx
+python-multipart
