@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#04070d">
+<title>J.A.R.V.I.S.</title>
+<style>
+  :root { --cyan: #35e0ff; --cyan-dim: #1a7d99; --bg: #04070d; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: #d7f4ff;
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif; height: 100%; }
+  #app { display: flex; flex-direction: column; height: 100dvh; max-width: 640px; margin: 0 auto; }
+  header { text-align: center; padding: 18px 12px 8px; }
+  header h1 { margin: 0; font-size: 26px; letter-spacing: 10px; color: var(--cyan);
+    text-shadow: 0 0 18px var(--cyan), 0 0 46px var(--cyan-dim); font-weight: 600; }
+  #status { font-size: 12px; color: #7fb6c9; margin-top: 6px; min-height: 16px; }
+  #log { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 88%; padding: 10px 14px; border-radius: 14px; font-size: 15px; line-height: 1.45;
+    word-wrap: break-word; }
+  .you { align-self: flex-end; background: #0e2a38; border: 1px solid var(--cyan-dim); }
+  .jarvis { align-self: flex-start; background: #07141d; border: 1px solid #123; }
+  .jarvis b { color: var(--cyan); }
+  .tools { font-size: 11px; color: #5b8a9c; margin-top: 4px; }
+  #controls { padding: 14px 16px 22px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  #mic { width: 104px; height: 104px; border-radius: 50%; border: 2px solid var(--cyan);
+    background: radial-gradient(circle at 50% 50%, #0b3548 0%, #06121c 70%);
+    color: var(--cyan); font-size: 40px; cursor: pointer; position: relative;
+    box-shadow: 0 0 24px rgba(53,224,255,.35), inset 0 0 24px rgba(53,224,255,.18);
+    transition: transform .08s; touch-action: none; user-select: none; -webkit-user-select: none; }
+  #mic:active, #mic.listening { transform: scale(1.06);
+    box-shadow: 0 0 44px rgba(53,224,255,.7), inset 0 0 30px rgba(53,224,255,.35);
+    animation: pulse 1.1s ease-in-out infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 64px rgba(53,224,255,.9), inset 0 0 34px rgba(53,224,255,.4); } }
+  #hint { font-size: 12px; color: #7fb6c9; }
+  #tokenRow { display: flex; gap: 8px; width: 100%; }
+  #token { flex: 1; background: #07141d; border: 1px solid var(--cyan-dim); color: #d7f4ff;
+    border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+  #saveToken { background: #0b3548; border: 1px solid var(--cyan); color: var(--cyan);
+    border-radius: 10px; padding: 10px 16px; font-size: 14px; }
+  #textRow { display: flex; gap: 8px; width: 100%; }
+  #textIn { flex: 1; background: #07141d; border: 1px solid var(--cyan-dim); color: #d7f4ff;
+    border-radius: 10px; padding: 10px 12px; font-size: 15px; }
+  #send { background: #0b3548; border: 1px solid var(--cyan); color: var(--cyan);
+    border-radius: 10px; padding: 10px 16px; font-size: 15px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>J.A.R.V.I.S.</h1>
+    <div id="status">Just A Rather Very Intelligent System</div>
+  </header>
+  <div id="log"></div>
+  <div id="controls">
+    <button id="mic" title="Hold to talk">&#127908;</button>
+    <div id="hint">Hold the button and speak, release to send</div>
+    <div id="textRow">
+      <input id="textIn" placeholder="Or type a command, sir…" autocomplete="off">
+      <button id="send">Send</button>
+    </div>
+    <div id="tokenRow">
+      <input id="token" type="password" placeholder="Server token (saved on this device)">
+      <button id="saveToken">Save</button>
+    </div>
+  </div>
+</div>
+<audio id="player" preload="auto"></audio>
+<script>
+(function () {
+  var log = document.getElementById('log');
+  var statusEl = document.getElementById('status');
+  var mic = document.getElementById('mic');
+  var player = document.getElementById('player');
+  var tokenInput = document.getElementById('token');
+  var textIn = document.getElementById('textIn');
+
+  tokenInput.value = localStorage.getItem('jarvis_token') || '';
+  document.getElementById('saveToken').addEventListener('click', function () {
+    localStorage.setItem('jarvis_token', tokenInput.value.trim());
+    setStatus('Token saved on this device.');
+  });
+
+  function token() { return (localStorage.getItem('jarvis_token') || '').trim(); }
+  function setStatus(s) { statusEl.textContent = s; }
+  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+  function addMsg(cls, label, text, tools) {
+    var d = document.createElement('div');
+    d.className = 'msg ' + cls;
+    d.innerHTML = '<b>' + label + ':</b> ' + esc(text) +
+      (tools && tools.length ? '<div class="tools">tools: ' + esc(tools.join(', ')) + '</div>' : '');
+    log.appendChild(d);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function playAudio(b64) {
+    if (!b64) return;
+    player.src = 'data:audio/mpeg;base64,' + b64;
+    player.play().catch(function () {});
+  }
+
+  function handleReply(data) {
+    addMsg('jarvis', 'JARVIS', data.reply || '(no reply)', data.tools_used);
+    playAudio(data.audio_base64);
+    setStatus('At your service, sir.');
+  }
+
+  function apiError(status, body) {
+    var msg = 'Error ' + status;
+    try { var j = JSON.parse(body); if (j.detail) msg += ': ' + j.detail; } catch (e) {}
+    setStatus(msg);
+    addMsg('jarvis', 'JARVIS', 'System fault, sir — ' + msg, []);
+  }
+
+  function sendText(text) {
+    text = (text || '').trim();
+    if (!text) return;
+    if (!token()) { setStatus('Save your server token first.'); return; }
+    addMsg('you', 'You', text);
+    setStatus('Thinking…');
+    fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token() },
+      body: JSON.stringify({ text: text, voice: true })
+    }).then(function (r) {
+      if (!r.ok) { return r.text().then(function (b) { apiError(r.status, b); }); }
+      return r.json().then(handleReply);
+    }).catch(function (e) { setStatus('Network error: ' + e.message); });
+  }
+
+  document.getElementById('send').addEventListener('click', function () {
+    sendText(textIn.value); textIn.value = '';
+  });
+  textIn.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { sendText(textIn.value); textIn.value = ''; }
+  });
+
+  // Hold-to-talk via MediaRecorder
+  var recorder = null, chunks = [], stream = null, mimeType = '';
+
+  function pickMime() {
+    var cands = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+    for (var i = 0; i < cands.length; i++) {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported(cands[i])) return cands[i];
+    }
+    return '';
+  }
+
+  function extFor(m) {
+    if (m.indexOf('mp4') >= 0) return 'm4a';
+    if (m.indexOf('ogg') >= 0) return 'ogg';
+    return 'webm';
+  }
+
+  function startRec(e) {
+    if (e) e.preventDefault();
+    if (!token()) { setStatus('Save your server token first.'); return; }
+    if (recorder) return;
+    setStatus('Listening…');
+    mic.classList.add('listening');
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (s) {
+      stream = s;
+      mimeType = pickMime();
+      chunks = [];
+      recorder = new MediaRecorder(s, mimeType ? { mimeType: mimeType } : undefined);
+      recorder.ondataavailable = function (ev) { if (ev.data.size) chunks.push(ev.data); };
+      recorder.onstop = sendRecording;
+      recorder.start();
+    }).catch(function (err) {
+      mic.classList.remove('listening');
+      setStatus('Microphone blocked: ' + err.message);
+    });
+  }
+
+  function stopRec(e) {
+    if (e) e.preventDefault();
+    if (recorder && recorder.state !== 'inactive') { recorder.stop(); }
+    else { mic.classList.remove('listening'); }
+  }
+
+  function sendRecording() {
+    mic.classList.remove('listening');
+    if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
+    recorder = null;
+    if (!chunks.length) { setStatus('Nothing recorded.'); return; }
+    var blob = new Blob(chunks, { type: mimeType || 'audio/webm' });
+    chunks = [];
+    setStatus('Transcribing…');
+    var fd = new FormData();
+    fd.append('audio', blob, 'voice.' + extFor(mimeType));
+    fetch('/api/voice', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token() },
+      body: fd
+    }).then(function (r) {
+      if (!r.ok) { return r.text().then(function (b) { apiError(r.status, b); }); }
+      return r.json().then(function (data) {
+        if (data.transcript) addMsg('you', 'You', data.transcript);
+        handleReply(data);
+      });
+    }).catch(function (e) { setStatus('Network error: ' + e.message); });
+  }
+
+  mic.addEventListener('pointerdown', startRec);
+  mic.addEventListener('pointerup', stopRec);
+  mic.addEventListener('pointerleave', function () { if (recorder) stopRec(); });
+  mic.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+  // Health check on load
+  fetch('/api/health').then(function (r) { return r.json(); }).then(function (h) {
+    setStatus(h.groq_configured ? 'Online. At your service, sir.' :
+      'Online, but the Groq key is not set — voice and chat will refuse until it is.');
+  }).catch(function () { setStatus('Cannot reach server.'); });
+
+  addMsg('jarvis', 'JARVIS', 'Systems online. How may I assist, sir?', []);
+})();
+</script>
+</body>
+</html>
