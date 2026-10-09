@@ -1,0 +1,15 @@
+[Unit]
+Description=JARVIS voice assistant
+After=network.target
+
+[Service]
+Type=simple
+User=jarvis
+WorkingDirectory=/opt/jarvis
+EnvironmentFile=/etc/jarvis.env
+ExecStart=/opt/jarvis/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
