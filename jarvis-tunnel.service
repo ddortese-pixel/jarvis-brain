@@ -1,0 +1,13 @@
+[Unit]
+Description=JARVIS Cloudflare quick tunnel
+After=jarvis.service
+
+[Service]
+Type=simple
+User=jarvis
+ExecStart=/usr/local/bin/cloudflared tunnel --url http://127.0.0.1:8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
