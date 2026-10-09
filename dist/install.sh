@@ -643,9 +643,13 @@ chown -R jarvis:jarvis /opt/jarvis
 
 echo "[4/8] Writing /etc/jarvis.env ..."
 if [ ! -f /etc/jarvis.env ]; then
-  GROQ_KEY=""
-  read -s -r -p "Groq API key (free at https://groq.com — Enter to skip, add later): " GROQ_KEY </dev/tty || GROQ_KEY=""
-  echo
+  GROQ_KEY="${GROQ_API_KEY:-}"
+  if [ -z "$GROQ_KEY" ]; then
+    read -s -r -p "Groq API key (free at https://groq.com — Enter to skip, add later): " GROQ_KEY </dev/tty || GROQ_KEY=""
+    echo
+  else
+    echo "      (using GROQ_API_KEY from environment)"
+  fi
   JARVIS_TOKEN="$(openssl rand -hex 32)"
   {
     echo "GROQ_API_KEY=${GROQ_KEY}"
